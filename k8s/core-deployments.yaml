@@ -1,0 +1,455 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-monitoring-dashboard
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: dashboard
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: video-monitoring
+      component: dashboard
+  template:
+    metadata:
+      labels:
+        app: video-monitoring
+        component: dashboard
+    spec:
+      containers:
+      - name: dashboard
+        image: video-monitoring/dashboard:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: video-monitoring-secrets
+              key: database-url
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: PROMETHEUS_URL
+          value: "http://prometheus-server:9090"
+        - name: GRAFANA_URL
+          value: "http://grafana-service:3000"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: video-monitoring-dashboard-service
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: dashboard
+spec:
+  selector:
+    app: video-monitoring
+    component: dashboard
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-monitor
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: network-monitor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: video-monitoring
+      component: network-monitor
+  template:
+    metadata:
+      labels:
+        app: video-monitoring
+        component: network-monitor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: network-monitor
+        image: video-monitoring/network-monitor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8002
+          name: metrics
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus-server:9090"
+        - name: MONITOR_INTERVAL
+          value: "30s"
+        - name: NETWORK_TARGETS
+          value: "aws,azure,gcp,cloudflare"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: network-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: network-config
+        configMap:
+          name: network-monitor-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-monitor-service
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: network-monitor
+spec:
+  selector:
+    app: video-monitoring
+    component: network-monitor
+  ports:
+  - port: 8002
+    targetPort: 8002
+    name: metrics
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn-integration
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: cdn-integration
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: video-monitoring
+      component: cdn-integration
+  template:
+    metadata:
+      labels:
+        app: video-monitoring
+        component: cdn-integration
+    spec:
+      containers:
+      - name: cdn-integration
+        image: video-monitoring/cdn-integration:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8003
+          name: http
+        env:
+        - name: CLOUDFLARE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: cloudflare-api-token
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: aws-secret-access-key
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: azure-client-id
+        - name: AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: azure-client-secret
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cdn-secrets
+              key: gcp-project-id
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: cdn-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: cdn-config
+        configMap:
+          name: cdn-integration-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-integration-service
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: cdn-integration
+spec:
+  selector:
+    app: video-monitoring
+    component: cdn-integration
+  ports:
+  - port: 80
+    targetPort: 8003
+    name: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-analytics
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: video-analytics
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: video-monitoring
+      component: video-analytics
+  template:
+    metadata:
+      labels:
+        app: video-monitoring
+        component: video-analytics
+    spec:
+      containers:
+      - name: video-analytics
+        image: video-monitoring/video-analytics:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8005
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: video-monitoring-secrets
+              key: analytics-database-url
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: PROCESSING_WORKERS
+          value: "4"
+        - name: ML_MODEL_PATH
+          value: "/app/models"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: ml-models
+          mountPath: /app/models
+          readOnly: true
+        - name: temp-storage
+          mountPath: /tmp
+      volumes:
+      - name: ml-models
+        persistentVolumeClaim:
+          claimName: video-analytics-models-pvc
+      - name: temp-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: video-analytics-service
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: video-analytics
+spec:
+  selector:
+    app: video-monitoring
+    component: video-analytics
+  ports:
+  - port: 80
+    targetPort: 8005
+    name: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-monitor
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: security-monitor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: video-monitoring
+      component: security-monitor
+  template:
+    metadata:
+      labels:
+        app: video-monitoring
+        component: security-monitor
+    spec:
+      containers:
+      - name: security-monitor
+        image: video-monitoring/security-monitor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8004
+          name: http
+        env:
+        - name: DRM_VALIDATION
+          value: "true"
+        - name: COMPLIANCE_MODE
+          value: "SOC2,GDPR,CCPA"
+        - name: THREAT_DETECTION
+          value: "enabled"
+        - name: SECURITY_SCAN_INTERVAL
+          value: "300s"
+        - name: ALERT_WEBHOOK
+          valueFrom:
+            secretKeyRef:
+              name: security-secrets
+              key: alert-webhook-url
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: security-logs
+          mountPath: /app/logs
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+      volumes:
+      - name: security-logs
+        persistentVolumeClaim:
+          claimName: security-logs-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-monitor-service
+  namespace: video-monitoring
+  labels:
+    app: video-monitoring
+    component: security-monitor
+spec:
+  selector:
+    app: video-monitoring
+    component: security-monitor
+  ports:
+  - port: 80
+    targetPort: 8004
+    name: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: video-monitoring-ingress
+  namespace: video-monitoring
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - video-monitoring.company.com
+    secretName: video-monitoring-tls
+  rules:
+  - host: video-monitoring.company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: video-monitoring-dashboard-service
+            port:
+              number: 80
+      - path: /api/network
+        pathType: Prefix
+        backend:
+          service:
+            name: network-monitor-service
+            port:
+              number: 8002
+      - path: /api/cdn
+        pathType: Prefix
+        backend:
+          service:
+            name: cdn-integration-service
+            port:
+              number: 80
+      - path: /api/analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: video-analytics-service
+            port:
+              number: 80
+      - path: /api/security
+        pathType: Prefix
+        backend:
+          service:
+            name: security-monitor-service
+            port:
+              number: 80

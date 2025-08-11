@@ -1,0 +1,381 @@
+version: '3.8'
+
+services:
+  # 🗄️ PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cloud-video-postgres
+    environment:
+      POSTGRES_DB: cloud_video_monitoring
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloud_video_secure_2025}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - video-monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cloud_video_monitoring"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 🗃️ Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cloud-video-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - video-monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 🎥 Backend API with Database Integration
+  backend-api:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cloud-video-backend
+    environment:
+      # Database Configuration
+      - USE_SQLITE=false
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=cloud_video_monitoring
+      - DB_USER=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-cloud_video_secure_2025}
+      - DB_POOL_SIZE=10
+      - DB_MAX_OVERFLOW=20
+      
+      # Livepeer Configuration
+      - LIVEPEER_API_KEY=40d145e9-4cae-4913-89a2-fcd1c4fa3bfb
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379
+      
+      # Application Configuration
+      - MAX_VIDEO_SIZE_MB=500
+      - UPLOAD_DIRECTORY=/app/uploads
+      - THUMBNAIL_DIRECTORY=/app/thumbnails
+      - ANALYTICS_RETENTION_DAYS=90
+      - ENABLE_REAL_TIME_ANALYTICS=true
+      
+      # Security
+      - SESSION_TIMEOUT_HOURS=24
+      - JWT_SECRET_KEY=${JWT_SECRET:-cloud_video_jwt_secret_2025}
+      
+      # Performance
+      - ENABLE_QUERY_OPTIMIZATION=true
+      - CACHE_ENABLED=true
+      - CACHE_TTL_SECONDS=300
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./thumbnails:/app/thumbnails
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - video-monitoring
+    restart: unless-stopped
+
+  # 🌐 Frontend Web Server
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cloud-video-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_API_URL=http://backend-api:8000
+      - LIVEPEER_API_KEY=40d145e9-4cae-4913-89a2-fcd1c4fa3bfb
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend-api
+    networks:
+      - video-monitoring
+    restart: unless-stopped
+
+  # 🎥 Video Source Simulator
+  video-source-simulator:
+    build: ./src/video-source
+    container_name: video-source-simulator
+    environment:
+      - ENCODER_COUNT=4
+      - STREAM_QUALITY=1080p,720p,480p,360p
+      - BITRATE_RANGE=1000-8000
+      - FPS=30
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cloud_video_secure_2025}@postgres:5432/cloud_video_monitoring
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data/video-sources:/app/sources
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - video-monitoring
+
+  # 📊 Network Performance Monitor
+  network-monitor:
+    build: ./src/monitoring/network
+    container_name: network-performance-monitor
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - GRAFANA_URL=http://grafana:3000
+      - ALERT_WEBHOOK=http://alertmanager:9093
+      - MONITOR_INTERVAL=30s
+      - NETWORK_TARGETS=aws,azure,gcp
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cloud_video_secure_2025}@postgres:5432/cloud_video_monitoring
+    ports:
+      - "8002:8002"
+    depends_on:
+      - prometheus
+      - grafana
+      - postgres
+    networks:
+      - video-monitoring
+
+  # 🌐 CDN Integration Service
+  cdn-integration:
+    build: ./src/cdn-integration
+    container_name: cdn-integration-service
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - AWS_CLOUDFRONT_ACCESS_KEY=${AWS_ACCESS_KEY_ID}
+      - AWS_CLOUDFRONT_SECRET_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AZURE_CDN_SUBSCRIPTION=${AZURE_SUBSCRIPTION_ID}
+      - GCP_CDN_PROJECT=${GCP_PROJECT_ID}
+      - CDN_PERFORMANCE_CHECK_INTERVAL=60s
+      - LIVEPEER_API_KEY=40d145e9-4cae-4913-89a2-fcd1c4fa3bfb
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cloud_video_secure_2025}@postgres:5432/cloud_video_monitoring
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./config/cdn:/app/config
+    networks:
+      - video-monitoring
+
+  # 🔐 Security Monitor
+  security-monitor:
+    build: ./src/security
+    container_name: security-monitor
+    environment:
+      - DRM_VALIDATION=true
+      - COMPLIANCE_MODE=SOC2,GDPR
+      - THREAT_DETECTION=enabled
+      - SECURITY_SCAN_INTERVAL=300s
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./data/security-logs:/app/logs
+    networks:
+      - video-monitoring
+
+  # 📈 Video Analytics Engine
+  video-analytics:
+    build: ./src/analytics
+    container_name: video-analytics-engine
+    environment:
+      - ANALYTICS_DB_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cloud_video_secure_2025}@postgres:5432/cloud_video_monitoring
+      - REDIS_URL=redis://redis:6379
+      - ML_MODEL_PATH=/app/models
+      - PROCESSING_WORKERS=4
+      - LIVEPEER_API_KEY=40d145e9-4cae-4913-89a2-fcd1c4fa3bfb
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data/ml-models:/app/models
+    networks:
+      - video-monitoring
+
+  # 🎛️ Main Dashboard API
+  dashboard-api:
+    build: ./src/dashboard
+    container_name: video-monitoring-dashboard
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cloud_video_secure_2025}@postgres:5432/cloud_video_monitoring
+      - JWT_SECRET=${JWT_SECRET:-cloud_video_jwt_secret_2025}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - LOG_LEVEL=info
+      - LIVEPEER_API_KEY=40d145e9-4cae-4913-89a2-fcd1c4fa3bfb
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - video-monitoring
+
+  # 📊 Prometheus (Metrics Collection)
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    networks:
+      - video-monitoring
+
+  # 📊 Grafana (Visualization)
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-worldmap-panel,grafana-piechart-panel
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres:5432
+      - GF_DATABASE_NAME=cloud_video_monitoring
+      - GF_DATABASE_USER=postgres
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-cloud_video_secure_2025}
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./dashboards/grafana:/etc/grafana/provisioning/dashboards
+      - ./config/grafana:/etc/grafana/provisioning/datasources
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - video-monitoring
+
+  # 🚨 AlertManager (Alert Handling)
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager:/etc/alertmanager
+      - alertmanager_data:/alertmanager
+    networks:
+      - video-monitoring
+
+  # 📝 Elasticsearch (Log Storage)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - video-monitoring
+
+  # 📊 Kibana (Log Visualization)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - video-monitoring
+
+  # 🌐 NGINX (Reverse Proxy & Load Balancer)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx:/etc/nginx/conf.d
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - backend-api
+      - frontend
+    networks:
+      - video-monitoring
+
+  # 🔍 Node Exporter (System Metrics)
+  node-exporter:
+    image: prom/node-exporter:v1.6.0
+    container_name: node-exporter
+    command:
+      - '--path.rootfs=/host'
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro,rslave'
+    ports:
+      - "9100:9100"
+    networks:
+      - video-monitoring
+
+  # 📊 cAdvisor (Container Metrics)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /cgroup:/cgroup:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - video-monitoring
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  elasticsearch_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  video-monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

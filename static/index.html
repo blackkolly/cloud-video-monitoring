@@ -1,0 +1,574 @@
+# 📺 Video Player Frontend
+# Simple HTML5 video player with monitoring integration
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Video Streaming Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .video-player {
+            width: 100%;
+            height: auto;
+            min-height: 400px;
+        }
+        
+        .video-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            padding: 20px;
+            color: white;
+        }
+        
+        .quality-selector {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        
+        .stats-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .video-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .video-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        
+        .metrics-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <nav class="navbar navbar-dark bg-dark mb-4">
+            <div class="container">
+                <span class="navbar-brand">
+                    <i class="fas fa-play-circle"></i>
+                    Cloud Video Streaming Platform
+                </span>
+                <div class="navbar-nav">
+                    <button class="btn btn-outline-light" onclick="showUploadModal()">
+                        <i class="fas fa-upload"></i> Upload Video
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="row">
+            <!-- Video Player Section -->
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-body p-0">
+                        <div class="video-container" id="videoContainer">
+                            <!-- Stats Overlay -->
+                            <div class="stats-overlay" id="statsOverlay" style="display: none;">
+                                <div>Resolution: <span id="resolution">-</span></div>
+                                <div>Bitrate: <span id="bitrate">-</span></div>
+                                <div>Buffer: <span id="bufferLevel">-</span></div>
+                                <div>Network: <span id="networkSpeed">-</span></div>
+                                <div>CDN: <span id="cdnProvider">-</span></div>
+                            </div>
+                            
+                            <!-- Quality Selector -->
+                            <div class="quality-selector">
+                                <select class="form-select form-select-sm" id="qualitySelect" onchange="changeQuality()">
+                                    <option value="auto">Auto</option>
+                                    <option value="1080p">1080p</option>
+                                    <option value="720p">720p</option>
+                                    <option value="480p">480p</option>
+                                    <option value="360p">360p</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Video Element -->
+                            <video class="video-player" id="videoPlayer" controls>
+                                <source src="" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            
+                            <!-- Loading Indicator -->
+                            <div class="d-flex justify-content-center align-items-center position-absolute top-0 start-0 w-100 h-100" id="loadingIndicator" style="background: rgba(0,0,0,0.5);">
+                                <div class="spinner-border text-light" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Video Info -->
+                    <div class="card-footer">
+                        <h5 id="videoTitle">Select a video to play</h5>
+                        <p class="text-muted mb-0" id="videoDescription">
+                            Choose a video from the library or upload a new one
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Monitoring Metrics -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card metrics-card text-center">
+                            <div class="card-body">
+                                <i class="fas fa-eye fa-2x mb-2"></i>
+                                <h4 id="currentViewers">0</h4>
+                                <small>Current Viewers</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white text-center">
+                            <div class="card-body">
+                                <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                                <h4 id="avgBitrate">0 Mbps</h4>
+                                <small>Avg Bitrate</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white text-center">
+                            <div class="card-body">
+                                <i class="fas fa-server fa-2x mb-2"></i>
+                                <h4 id="bufferHealth">100%</h4>
+                                <small>Buffer Health</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white text-center">
+                            <div class="card-body">
+                                <i class="fas fa-globe fa-2x mb-2"></i>
+                                <h4 id="cdnStatus">Active</h4>
+                                <small>CDN Status</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Video Library -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Video Library</h6>
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshVideoList()">
+                            <i class="fas fa-refresh"></i>
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="video-list" id="videoList">
+                            <!-- Videos will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal fade" id="uploadModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload Video</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="upload-area" id="uploadArea">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                        <h6>Drag & Drop Video File Here</h6>
+                        <p class="text-muted">or click to browse</p>
+                        <input type="file" class="d-none" id="fileInput" accept="video/*" onchange="handleFileSelect(event)">
+                    </div>
+                    
+                    <!-- Upload Progress -->
+                    <div class="mt-3" id="uploadProgress" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted mt-1 d-block">Uploading... <span id="progressText">0%</span></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="uploadVideo()" id="uploadBtn" disabled>Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class VideoStreamingApp {
+            constructor() {
+                this.currentVideo = null;
+                this.selectedFile = null;
+                this.streamingSocket = null;
+                this.monitoringInterval = null;
+                this.baseUrl = window.location.origin;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupEventListeners();
+                this.loadVideoList();
+                this.startMonitoring();
+            }
+            
+            setupEventListeners() {
+                // Video player events
+                const video = document.getElementById('videoPlayer');
+                video.addEventListener('loadstart', () => this.showLoading(true));
+                video.addEventListener('canplay', () => this.showLoading(false));
+                video.addEventListener('timeupdate', () => this.updateStats());
+                video.addEventListener('error', (e) => this.handleVideoError(e));
+                
+                // Upload area events
+                const uploadArea = document.getElementById('uploadArea');
+                uploadArea.addEventListener('click', () => document.getElementById('fileInput').click());
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('border-primary', 'bg-light');
+                });
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('border-primary', 'bg-light');
+                });
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('border-primary', 'bg-light');
+                    this.handleFileSelect(e);
+                });
+            }
+            
+            async loadVideoList() {
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/videos`);
+                    const data = await response.json();
+                    
+                    this.renderVideoList(data.videos);
+                } catch (error) {
+                    console.error('Error loading videos:', error);
+                    this.showError('Failed to load video library');
+                }
+            }
+            
+            renderVideoList(videos) {
+                const videoList = document.getElementById('videoList');
+                
+                if (videos.length === 0) {
+                    videoList.innerHTML = `
+                        <div class="text-center p-4 text-muted">
+                            <i class="fas fa-video fa-3x mb-2"></i>
+                            <p>No videos available</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                videoList.innerHTML = videos.map(video => `
+                    <div class="video-card p-3 border-bottom" onclick="app.playVideo('${video.id}', '${video.filename}')">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-play-circle fa-2x text-primary"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h6 class="mb-1">${video.filename}</h6>
+                                <small class="text-muted">
+                                    ${this.formatFileSize(video.size)} • 
+                                    ${video.metadata.duration ? this.formatDuration(video.metadata.duration) : 'Unknown'}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            async playVideo(videoId, filename) {
+                this.currentVideo = videoId;
+                
+                const video = document.getElementById('videoPlayer');
+                const quality = document.getElementById('qualitySelect').value;
+                
+                // Update video info
+                document.getElementById('videoTitle').textContent = filename;
+                document.getElementById('videoDescription').textContent = `Playing in ${quality} quality`;
+                
+                // Set video source
+                const streamUrl = quality === 'auto' ? 
+                    `${this.baseUrl}/stream/${videoId}` : 
+                    `${this.baseUrl}/stream/${videoId}?quality=${quality}`;
+                
+                video.src = streamUrl;
+                video.load();
+                
+                try {
+                    await video.play();
+                    this.showStatsOverlay(true);
+                    await this.updateStreamStats();
+                } catch (error) {
+                    console.error('Error playing video:', error);
+                    this.showError('Failed to play video');
+                }
+            }
+            
+            changeQuality() {
+                if (this.currentVideo) {
+                    const filename = document.getElementById('videoTitle').textContent;
+                    this.playVideo(this.currentVideo, filename);
+                }
+            }
+            
+            async updateStreamStats() {
+                if (!this.currentVideo) return;
+                
+                try {
+                    const response = await fetch(`${this.baseUrl}/api/stream/${this.currentVideo}/stats`);
+                    const stats = await response.json();
+                    
+                    // Update monitoring metrics
+                    document.getElementById('currentViewers').textContent = stats.active_streams;
+                    document.getElementById('avgBitrate').textContent = `${(stats.average_bitrate / 1000000).toFixed(1)} Mbps`;
+                    
+                } catch (error) {
+                    console.error('Error updating stats:', error);
+                }
+            }
+            
+            updateStats() {
+                const video = document.getElementById('videoPlayer');
+                
+                if (video.videoWidth && video.videoHeight) {
+                    document.getElementById('resolution').textContent = `${video.videoWidth}x${video.videoHeight}`;
+                }
+                
+                // Calculate buffer level
+                if (video.buffered.length > 0) {
+                    const buffered = video.buffered.end(video.buffered.length - 1);
+                    const duration = video.duration;
+                    const bufferPercent = duration ? Math.round((buffered / duration) * 100) : 0;
+                    document.getElementById('bufferHealth').textContent = `${bufferPercent}%`;
+                    document.getElementById('bufferLevel').textContent = `${Math.round(buffered - video.currentTime)}s`;
+                }
+                
+                // Estimate bitrate (simplified)
+                if (video.currentTime > 0) {
+                    const estimatedBitrate = (video.videoWidth * video.videoHeight * 0.1 / 1000).toFixed(0);
+                    document.getElementById('bitrate').textContent = `${estimatedBitrate} kbps`;
+                }
+            }
+            
+            handleFileSelect(event) {
+                const files = event.dataTransfer ? event.dataTransfer.files : event.target.files;
+                
+                if (files.length > 0) {
+                    this.selectedFile = files[0];
+                    document.getElementById('uploadBtn').disabled = false;
+                    
+                    // Update upload area text
+                    const uploadArea = document.getElementById('uploadArea');
+                    uploadArea.innerHTML = `
+                        <i class="fas fa-file-video fa-3x text-success mb-3"></i>
+                        <h6>${this.selectedFile.name}</h6>
+                        <p class="text-muted">${this.formatFileSize(this.selectedFile.size)}</p>
+                    `;
+                }
+            }
+            
+            async uploadVideo() {
+                if (!this.selectedFile) return;
+                
+                const formData = new FormData();
+                formData.append('video', this.selectedFile);
+                
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const uploadProgress = document.getElementById('uploadProgress');
+                
+                uploadProgress.style.display = 'block';
+                document.getElementById('uploadBtn').disabled = true;
+                
+                try {
+                    const xhr = new XMLHttpRequest();
+                    
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percentComplete = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = `${percentComplete}%`;
+                            progressText.textContent = `${percentComplete}%`;
+                        }
+                    });
+                    
+                    xhr.addEventListener('load', () => {
+                        if (xhr.status === 200) {
+                            const response = JSON.parse(xhr.responseText);
+                            this.showSuccess('Video uploaded successfully!');
+                            this.hideUploadModal();
+                            this.loadVideoList(); // Refresh video list
+                        } else {
+                            this.showError('Upload failed');
+                        }
+                        
+                        uploadProgress.style.display = 'none';
+                        document.getElementById('uploadBtn').disabled = false;
+                    });
+                    
+                    xhr.addEventListener('error', () => {
+                        this.showError('Upload failed');
+                        uploadProgress.style.display = 'none';
+                        document.getElementById('uploadBtn').disabled = false;
+                    });
+                    
+                    xhr.open('POST', `${this.baseUrl}/api/upload`);
+                    xhr.send(formData);
+                    
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    this.showError('Upload failed');
+                    uploadProgress.style.display = 'none';
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+            }
+            
+            startMonitoring() {
+                // Update metrics every 5 seconds
+                this.monitoringInterval = setInterval(() => {
+                    this.updateStreamStats();
+                }, 5000);
+            }
+            
+            showLoading(show) {
+                document.getElementById('loadingIndicator').style.display = show ? 'flex' : 'none';
+            }
+            
+            showStatsOverlay(show) {
+                document.getElementById('statsOverlay').style.display = show ? 'block' : 'none';
+            }
+            
+            showUploadModal() {
+                const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+                modal.show();
+            }
+            
+            hideUploadModal() {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+                if (modal) modal.hide();
+            }
+            
+            refreshVideoList() {
+                this.loadVideoList();
+            }
+            
+            handleVideoError(error) {
+                console.error('Video error:', error);
+                this.showError('Video playback error');
+            }
+            
+            formatFileSize(bytes) {
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                if (bytes === 0) return '0 Bytes';
+                const i = Math.floor(Math.log(bytes) / Math.log(1024));
+                return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+            }
+            
+            formatDuration(seconds) {
+                const hrs = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                
+                if (hrs > 0) {
+                    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            showError(message) {
+                // Simple error notification (you could use a toast library)
+                alert(`Error: ${message}`);
+            }
+            
+            showSuccess(message) {
+                // Simple success notification (you could use a toast library)
+                alert(`Success: ${message}`);
+            }
+        }
+        
+        // Global functions for onclick handlers
+        let app;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new VideoStreamingApp();
+        });
+        
+        function showUploadModal() {
+            app.showUploadModal();
+        }
+        
+        function changeQuality() {
+            app.changeQuality();
+        }
+        
+        function refreshVideoList() {
+            app.refreshVideoList();
+        }
+        
+        function handleFileSelect(event) {
+            app.handleFileSelect(event);
+        }
+        
+        function uploadVideo() {
+            app.uploadVideo();
+        }
+    </script>
+</body>
+</html>
