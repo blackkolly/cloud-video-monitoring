@@ -1,4 +1,4 @@
-# 🎥 Cloud Video Network Monitoring Platform
+# 🎥 Cloud Video Network Monitoring Platform for Azure cloud
 
 ## 🚀 Enterprise-Grade Video Streaming Network Infrastructure
 
