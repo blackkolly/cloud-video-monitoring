@@ -71,8 +71,8 @@ class SimpleVideoStreamer:
         # WebSocket for real-time streaming
         self.app.router.add_get('/ws/stream/{video_id}', self.websocket_stream)
         
-        # Static file serving
-        self.app.router.add_static('/', path='./static', name='static')
+        # Static file serving (commented out - frontend runs separately)
+        # self.app.router.add_static('/', path='./static', name='static')
 
     async def stream_video(self, request):
         """Stream video with adaptive quality"""

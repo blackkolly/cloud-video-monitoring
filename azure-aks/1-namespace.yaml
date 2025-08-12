@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: video-streaming
+  labels:
+    name: video-streaming
+    environment: production
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: video-app-config
+  namespace: video-streaming
+data:
+  DATABASE_URL: "postgresql://video_user:video_pass@postgres-service:5432/video_monitoring_db"
+  REDIS_URL: "redis://redis-service:6379"
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"
+  BACKEND_URL: "http://backend-service:8000"
+  CDN_MONITORING_MODE: "mock"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: video-app-secrets
+  namespace: video-streaming
+type: Opaque
+data:
+  # Base64 encoded values
+  postgres-password: dmlkZW9fcGFzcw==  # video_pass
+  postgres-user: dmlkZW9fdXNlcg==     # video_user
+  postgres-db: dmlkZW9fbW9uaXRvcmluZ19kYg==  # video_monitoring_db

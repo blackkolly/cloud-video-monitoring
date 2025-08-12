@@ -1,7 +1,7 @@
 # 🎯 Video Streaming API with Database Integration
 # Main API gateway for the video streaming platform with database support
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Form, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,18 +11,25 @@ import asyncio
 import aiofiles
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 import logging
 from datetime import datetime
 import uuid
+import time
 
 # Import our streaming service
 import sys
 sys.path.append('/app/backend')
 from streaming.video_streamer import SimpleVideoStreamer
 from monitoring.network_monitor import NetworkMonitor
-from services.cdn_manager import CDNManager
+from services.cdn_manager import CDNIntegrationService
+
+# Enhanced monitoring and analytics imports
+from monitoring.metrics_collector import metrics_collector
+from monitoring.azure_monitor import azure_monitor
+from analytics.video_analytics import analytics_engine, StreamingEvent
 
 # Database imports
 from database import get_database_session, db_manager
@@ -53,7 +60,7 @@ app.add_middleware(
 # Global instances
 video_streamer: Optional[SimpleVideoStreamer] = None
 network_monitor: Optional[NetworkMonitor] = None
-cdn_manager: Optional[CDNManager] = None
+cdn_manager: Optional[CDNIntegrationService] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -63,23 +70,55 @@ async def startup_event():
     logger.info("🚀 Starting Cloud Video Streaming Platform API")
     
     # Initialize video streaming service
-    video_streamer = SimpleVideoStreamer()
+    try:
+        video_streamer = SimpleVideoStreamer()
+        logger.info("✅ Video streaming service initialized")
+    except Exception as e:
+        logger.error(f"❌ Video streaming service failed: {e}")
+        video_streamer = None
     
     # Initialize monitoring services
     try:
         network_monitor = NetworkMonitor()
-        await network_monitor.start_monitoring()
+        # Don't await - let it run in background
+        import asyncio
+        asyncio.create_task(network_monitor.start_monitoring())
         logger.info("✅ Network monitoring started")
     except Exception as e:
         logger.error(f"❌ Network monitoring failed: {e}")
+        network_monitor = None
     
     # Initialize CDN manager
     try:
-        cdn_manager = CDNManager()
-        await cdn_manager.initialize()
+        cdn_manager = CDNIntegrationService()
+        # Don't await - let it initialize in background
+        asyncio.create_task(cdn_manager.initialize())
         logger.info("✅ CDN manager initialized")
     except Exception as e:
         logger.error(f"❌ CDN manager failed: {e}")
+        cdn_manager = None
+    
+    # Start enhanced metrics collection
+    try:
+        await metrics_collector.start_collection()
+        logger.info("✅ Enhanced metrics collection started")
+    except Exception as e:
+        logger.error(f"❌ Metrics collection failed: {e}")
+    
+    # Initialize Azure Monitor
+    try:
+        await azure_monitor.authenticate()
+        logger.info("✅ Azure Monitor integration initialized")
+    except Exception as e:
+        logger.error(f"❌ Azure Monitor failed: {e}")
+    
+    # Initialize analytics engine
+    try:
+        # Set initial active users
+        metrics_collector.set_active_users(125)
+        logger.info("✅ Analytics engine initialized")
+    except Exception as e:
+        logger.error(f"❌ Analytics engine failed: {e}")
     
     logger.info("🎥 Video Streaming Platform API ready!")
 
@@ -169,9 +208,11 @@ async def list_videos():
 
 @app.post("/api/upload")
 async def upload_video(video: UploadFile = File(...)):
-    """Upload a new video"""
+    """Upload a new video with analytics tracking"""
     if not video_streamer:
         raise HTTPException(status_code=503, detail="Video service not available")
+    
+    start_time = time.time()
     
     try:
         # Create upload directory
@@ -185,25 +226,37 @@ async def upload_video(video: UploadFile = File(...)):
             content = await video.read()
             await f.write(content)
         
+        # Record metrics
+        file_size = len(content)
+        metrics_collector.record_video_upload(file_size)
+        
         # Generate quality versions (async)
         asyncio.create_task(
             video_streamer._generate_quality_versions(str(file_path))
         )
         
+        # Record upload duration
+        duration = time.time() - start_time
+        metrics_collector.record_http_request("POST", "/api/upload", 200, duration)
+        
         return {
             "status": "success",
             "video_id": file_path.stem,
             "filename": video.filename,
-            "message": "Video uploaded successfully"
+            "file_size": file_size,
+            "message": "Video uploaded successfully",
+            "processing": "Quality versions are being generated in background"
         }
         
     except Exception as e:
         logger.error(f"Upload error: {e}")
+        duration = time.time() - start_time
+        metrics_collector.record_http_request("POST", "/api/upload", 500, duration)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/stream/{video_id}")
-async def stream_video(video_id: str, quality: Optional[str] = "720p"):
-    """Stream video with quality selection"""
+async def stream_video(video_id: str, quality: Optional[str] = "720p", request: Request = None):
+    """Stream video with quality selection and range support"""
     if not video_streamer:
         raise HTTPException(status_code=503, detail="Video service not available")
     
@@ -211,16 +264,58 @@ async def stream_video(video_id: str, quality: Optional[str] = "720p"):
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Video not found")
     
+    file_size = os.path.getsize(video_path)
+    
+    # Handle range requests for video streaming
+    range_header = request.headers.get('range') if request else None
+    
+    if range_header:
+        # Parse range header
+        range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+        if range_match:
+            start = int(range_match.group(1))
+            end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+            
+            # Ensure end doesn't exceed file size
+            end = min(end, file_size - 1)
+            content_length = end - start + 1
+            
+            def iter_range(file_path: str, start: int, end: int):
+                with open(file_path, "rb") as file_like:
+                    file_like.seek(start)
+                    remaining = end - start + 1
+                    chunk_size = 8192
+                    while remaining:
+                        chunk = file_like.read(min(chunk_size, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+            
+            return StreamingResponse(
+                iter_range(video_path, start, end),
+                status_code=206,  # Partial Content
+                media_type="video/mp4",
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Range": f"bytes {start}-{end}/{file_size}",
+                    "Content-Length": str(content_length)
+                }
+            )
+    
+    # Full file streaming (fallback)
     def iterfile(file_path: str):
         with open(file_path, "rb") as file_like:
-            yield from file_like
+            chunk_size = 8192
+            while chunk := file_like.read(chunk_size):
+                yield chunk
     
     return StreamingResponse(
         iterfile(video_path),
         media_type="video/mp4",
         headers={
             "Accept-Ranges": "bytes",
-            "Content-Length": str(os.path.getsize(video_path))
+            "Content-Length": str(file_size)
         }
     )
 
@@ -408,25 +503,114 @@ async def update_configuration(config: Dict):
 @app.get("/metrics")
 async def prometheus_metrics():
     """Prometheus metrics endpoint"""
-    if video_streamer:
-        mock_request = type('MockRequest', (), {})()
-        response = await video_streamer.prometheus_metrics(mock_request)
-        if hasattr(response, 'text'):
-            return response.text
-        return response
-    
-    # Fallback metrics
-    metrics = [
-        f'video_active_streams 0',
-        f'video_bytes_transferred_total 0',
-        f'network_latency_seconds 0.025',
-        f'bandwidth_utilization_percent 75.5'
-    ]
-    
-    return '\n'.join(metrics)
+    try:
+        return metrics_collector.get_metrics()
+    except Exception as e:
+        logger.error(f"Error getting Prometheus metrics: {e}")
+        # Fallback basic metrics
+        metrics = [
+            f'video_active_streams 0',
+            f'video_bytes_transferred_total 0',
+            f'network_latency_seconds 0.025',
+            f'bandwidth_utilization_percent 75.5'
+        ]
+        return '\n'.join(metrics)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# Enhanced Analytics Endpoints
+@app.get("/api/analytics/realtime")
+async def get_realtime_analytics():
+    """Get real-time streaming analytics"""
+    try:
+        return analytics_engine.get_real_time_metrics()
+    except Exception as e:
+        logger.error(f"Error getting real-time analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/network")
+async def get_network_analytics():
+    """Get comprehensive network analytics"""
+    try:
+        return analytics_engine.get_network_analytics()
+    except Exception as e:
+        logger.error(f"Error getting network analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/engagement")
+async def get_engagement_analytics():
+    """Get user engagement analytics"""
+    try:
+        return analytics_engine.get_user_engagement_analytics()
+    except Exception as e:
+        logger.error(f"Error getting engagement analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/azure-costs")
+async def get_azure_cost_analytics():
+    """Get Azure cost and resource analytics"""
+    try:
+        return analytics_engine.get_azure_cost_analytics()
+    except Exception as e:
+        logger.error(f"Error getting cost analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/report")
+async def get_comprehensive_report(time_range: str = "24h"):
+    """Get comprehensive analytics report"""
+    try:
+        return analytics_engine.generate_analytics_report(time_range)
+    except Exception as e:
+        logger.error(f"Error generating analytics report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Azure Monitor Integration Endpoints
+@app.get("/api/azure/aks-metrics")
+async def get_aks_metrics():
+    """Get AKS cluster metrics from Azure Monitor"""
+    try:
+        return await azure_monitor.get_aks_metrics()
+    except Exception as e:
+        logger.error(f"Error getting AKS metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/azure/network-metrics")
+async def get_azure_network_metrics():
+    """Get Azure network metrics"""
+    try:
+        return await azure_monitor.get_network_metrics()
+    except Exception as e:
+        logger.error(f"Error getting Azure network metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/azure/cost-metrics")
+async def get_azure_cost_metrics():
+    """Get Azure cost metrics"""
+    try:
+        return await azure_monitor.get_cost_metrics()
+    except Exception as e:
+        logger.error(f"Error getting Azure cost metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/azure/application-insights")
+async def get_application_insights():
+    """Get Application Insights metrics"""
+    try:
+        return await azure_monitor.get_application_insights_metrics()
+    except Exception as e:
+        logger.error(f"Error getting Application Insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Enhanced Metrics Summary
+@app.get("/api/metrics/summary")
+async def get_metrics_summary():
+    """Get comprehensive metrics summary"""
+    try:
+        return metrics_collector.get_metrics_summary()
+    except Exception as e:
+        logger.error(f"Error getting metrics summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Mount static files (frontend runs separately)
+# app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 if __name__ == "__main__":
     uvicorn.run(

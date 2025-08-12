@@ -1,0 +1,91 @@
+# Grafana Deployment for Video Streaming Analytics
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: video-streaming
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.0.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "video_streaming_admin"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-azure-monitor-datasource,redis-datasource,postgres-datasource"
+        - name: GF_SERVER_ROOT_URL
+          value: "%(protocol)s://%(domain)s:%(http_port)s/"
+        - name: GF_ANALYTICS_REPORTING_ENABLED
+          value: "false"
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-dashboards
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+      volumes:
+      - name: grafana-storage
+        emptyDir: {}
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasources
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: video-streaming
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+# External LoadBalancer for Grafana access
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-external
+  namespace: video-streaming
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: web

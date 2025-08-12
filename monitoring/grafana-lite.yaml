@@ -1,0 +1,57 @@
+# Lightweight Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-lite
+  namespace: video-streaming
+  labels:
+    app: grafana-lite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana-lite
+  template:
+    metadata:
+      labels:
+        app: grafana-lite
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.0.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "video_admin"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 300m
+            memory: 512Mi
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: grafana-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-lite-service
+  namespace: video-streaming
+  labels:
+    app: grafana-lite
+spec:
+  selector:
+    app: grafana-lite
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP

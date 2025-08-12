@@ -1,0 +1,88 @@
+# Lightweight Prometheus Configuration for Azure AKS
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-lite
+  namespace: video-streaming
+  labels:
+    app: prometheus-lite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-lite
+  template:
+    metadata:
+      labels:
+        app: prometheus-lite
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.45.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus/'
+          - '--web.enable-lifecycle'
+          - '--storage.tsdb.retention.time=24h'
+        ports:
+        - containerPort: 9090
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus/
+        - name: storage-volume
+          mountPath: /prometheus/
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-lite-config
+      - name: storage-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-lite-service
+  namespace: video-streaming
+  labels:
+    app: prometheus-lite
+spec:
+  selector:
+    app: prometheus-lite
+  type: LoadBalancer
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-lite-config
+  namespace: video-streaming
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    scrape_configs:
+      # Video Backend API
+      - job_name: 'video-backend'
+        static_configs:
+        - targets: ['backend-service:8000']
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+
+      # System metrics from backend
+      - job_name: 'video-api-metrics'
+        static_configs:
+        - targets: ['backend-service:8000']
+        metrics_path: '/api/metrics/summary'
+        scrape_interval: 30s

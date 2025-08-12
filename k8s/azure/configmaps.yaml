@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: video-streaming
+data:
+  POSTGRES_DB: "video_streaming"
+  POSTGRES_USER: "admin"
+  POSTGRES_HOST: "video-streaming-dev-postgres.postgres.database.azure.com"
+  POSTGRES_PORT: "5432"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: video-streaming
+type: Opaque
+data:
+  # Base64 encoded password - replace with actual password
+  POSTGRES_PASSWORD: "VmlkZW9TdHJlYW1pbmdEZXZAMjAyNQ=="  # VideoStreamingDev@2025
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: video-streaming
+data:
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: video-streaming
+data:
+  FASTAPI_ENV: "development"
+  LOG_LEVEL: "info"
+  CORS_ORIGINS: "*"
+  MAX_FILE_SIZE: "104857600"  # 100MB

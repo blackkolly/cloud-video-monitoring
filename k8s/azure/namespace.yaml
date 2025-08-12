@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: video-streaming
+  labels:
+    name: video-streaming
+    project: video-streaming-platform
+    environment: dev

@@ -1,0 +1,51 @@
+# Grafana Data Sources Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: video-streaming
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    
+    datasources:
+      # Prometheus Data Source
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service:9090
+        isDefault: true
+        editable: true
+        
+      # Azure Monitor Data Source
+      - name: Azure Monitor
+        type: grafana-azure-monitor-datasource
+        access: proxy
+        jsonData:
+          subscriptionId: "${AZURE_SUBSCRIPTION_ID}"
+          tenantId: "${AZURE_TENANT_ID}"
+          clientId: "${AZURE_CLIENT_ID}"
+          cloudName: "azuremonitor"
+        secureJsonData:
+          clientSecret: "${AZURE_CLIENT_SECRET}"
+        editable: true
+        
+      # PostgreSQL Data Source
+      - name: PostgreSQL
+        type: postgres
+        access: proxy
+        url: postgres-service:5432
+        database: video_monitoring_db
+        user: video_user
+        secureJsonData:
+          password: video_pass
+        jsonData:
+          sslmode: disable
+        editable: true
+        
+      # Redis Data Source
+      - name: Redis
+        type: redis-datasource
+        access: proxy
+        url: redis://redis-service:6379
+        editable: true

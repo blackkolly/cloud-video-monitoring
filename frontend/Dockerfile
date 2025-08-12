@@ -14,16 +14,16 @@ RUN apk add --no-cache \
     g++
 
 # Copy package files
-COPY package*.json ./
+COPY frontend/package*.json ./
 
 # Install npm dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # Development stage
 FROM base as development
 
 # Install all dependencies (including dev)
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -41,10 +41,10 @@ FROM nginx:alpine as production
 COPY --from=base /app .
 
 # Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy source files
-COPY . /usr/share/nginx/html
+COPY frontend/ /usr/share/nginx/html
 
 # Expose port
 EXPOSE 3000

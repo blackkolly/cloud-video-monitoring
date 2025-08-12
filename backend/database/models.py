@@ -60,7 +60,7 @@ class Video(Base):
     
     # Metadata
     thumbnail_path = Column(String(500))
-    metadata = Column(JSON)  # Additional video metadata
+    video_metadata = Column(JSON)  # Additional video metadata
     
     # Foreign keys
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)

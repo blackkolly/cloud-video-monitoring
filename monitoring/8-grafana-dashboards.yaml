@@ -1,0 +1,477 @@
+# Grafana Dashboard Configurations for Video Streaming Analytics
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: video-streaming
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+  
+  video-streaming-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Video Streaming Platform - Overview",
+        "tags": ["video", "streaming", "azure", "overview"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Active Video Streams",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "video_streams_active",
+                "legendFormat": "Active Streams"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 100},
+                    {"color": "red", "value": 500}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Total Video Uploads",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "video_uploads_total",
+                "legendFormat": "Total Uploads"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Data Served (GB)",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "video_bytes_served_total / 1024 / 1024 / 1024",
+                "legendFormat": "Data Served"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "decbytes",
+                "decimals": 2
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Active Users",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "active_users_total",
+                "legendFormat": "Active Users"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Stream Activity Over Time",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "video_streams_active",
+                "legendFormat": "Active Streams"
+              },
+              {
+                "expr": "rate(video_uploads_total[5m]) * 300",
+                "legendFormat": "Upload Rate (5m)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 6,
+            "title": "Video Quality Distribution",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "video_quality_score",
+                "legendFormat": "{{quality}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 7,
+            "title": "HTTP Request Rate",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total[1m]) * 60",
+                "legendFormat": "{{method}} {{endpoint}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+          }
+        ],
+        "time": {"from": "now-1h", "to": "now"},
+        "refresh": "10s"
+      }
+    }
+  
+  azure-infrastructure.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Azure Infrastructure Monitoring",
+        "tags": ["azure", "aks", "infrastructure"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "AKS Cluster CPU Usage",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "system_cpu_usage_percent",
+                "legendFormat": "CPU Usage %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 90}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "AKS Cluster Memory Usage",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "system_memory_usage_percent",
+                "legendFormat": "Memory Usage %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "red", "value": 95}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Network Latency",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "network_latency_seconds * 1000",
+                "legendFormat": "Latency (ms)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "ms",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "red", "value": 100}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Network Bandwidth",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "network_bandwidth_mbps",
+                "legendFormat": "Bandwidth (Mbps)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "bps",
+                "decimals": 1
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Pod Status",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "aks_pod_status",
+                "legendFormat": "{{pod_name}} - {{status}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 6,
+            "title": "Network Connections",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "network_connections_total",
+                "legendFormat": "Active Connections"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {"from": "now-1h", "to": "now"},
+        "refresh": "30s"
+      }
+    }
+  
+  network-performance.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Network Performance Analytics",
+        "tags": ["network", "performance", "analytics"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Network Latency Trends",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "network_latency_seconds * 1000",
+                "legendFormat": "Latency (ms)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "ms"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Bandwidth Utilization",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "network_bandwidth_mbps",
+                "legendFormat": "Bandwidth (Mbps)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "bps"
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Packet Loss Rate",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "network_packet_loss_percent",
+                "legendFormat": "Packet Loss %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 0.5},
+                    {"color": "red", "value": 1.0}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Video Streaming Quality Events",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(video_buffering_events_total[5m]) * 300",
+                "legendFormat": "Buffering Events"
+              },
+              {
+                "expr": "rate(video_playback_errors_total[5m]) * 300",
+                "legendFormat": "Playback Errors"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+          }
+        ],
+        "time": {"from": "now-4h", "to": "now"},
+        "refresh": "1m"
+      }
+    }
+  
+  cost-monitoring.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Azure Cost Monitoring",
+        "tags": ["azure", "cost", "billing"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Monthly Azure Spend",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "azure_cost_usd_total",
+                "legendFormat": "Total Cost (USD)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "currencyUSD",
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 75},
+                    {"color": "red", "value": 100}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Budget Utilization",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "azure_budget_utilization_percent",
+                "legendFormat": "Budget Used %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 90}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Projected Monthly Cost",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "azure_projected_monthly_cost_usd",
+                "legendFormat": "Projected Cost (USD)"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "currencyUSD"
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Cost by Service",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "azure_service_cost_usd",
+                "legendFormat": "{{service}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+          }
+        ],
+        "time": {"from": "now-30d", "to": "now"},
+        "refresh": "1h"
+      }
+    }

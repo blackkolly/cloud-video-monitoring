@@ -59,7 +59,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=cloud_video_secure_2025
     ports:
-      - "8080:8080"
+      - "8080:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +78,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:8080/health",
+          "http://localhost:8000/health",
           "||",
           "exit",
           "1",

@@ -1,0 +1,65 @@
+{
+  "cdn_providers": {
+    "cloudflare": {
+      "api_key": "your-cloudflare-api-key",
+      "api_secret": "your-cloudflare-api-secret",
+      "zone_id": "your-zone-id",
+      "enabled": true,
+      "regions": [
+        "global"
+      ]
+    },
+    "aws_cloudfront": {
+      "api_key": "your-aws-access-key",
+      "api_secret": "your-aws-secret",
+      "distribution_id": "your-distribution-id",
+      "enabled": true,
+      "regions": [
+        "us-east-1",
+        "us-west-2",
+        "eu-west-1",
+        "ap-southeast-1"
+      ]
+    },
+    "azure_cdn": {
+      "api_key": "your-azure-client-id",
+      "api_secret": "your-azure-secret",
+      "endpoint_url": "your-endpoint.azureedge.net",
+      "enabled": true,
+      "regions": [
+        "westus2",
+        "eastus",
+        "westeurope",
+        "southeastasia"
+      ]
+    },
+    "google_cdn": {
+      "api_key": "your-gcp-project",
+      "endpoint_url": "your-endpoint.googleapis.com",
+      "enabled": true,
+      "regions": [
+        "us-central1",
+        "us-west1",
+        "europe-west1",
+        "asia-southeast1"
+      ]
+    }
+  },
+  "monitoring": {
+    "check_interval_seconds": 60,
+    "health_check_timeout": 10,
+    "performance_threshold_ms": 500,
+    "error_rate_threshold": 1.0
+  },
+  "failover": {
+    "enabled": true,
+    "primary_provider": "cloudflare",
+    "fallback_order": [
+      "aws_cloudfront",
+      "azure_cdn",
+      "google_cdn"
+    ],
+    "switch_threshold_failures": 3,
+    "switch_back_delay_minutes": 15
+  }
+}
