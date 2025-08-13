@@ -86,3 +86,17 @@ data:
         - targets: ['backend-service:8000']
         metrics_path: '/api/metrics/summary'
         scrape_interval: 30s
+
+      # PostgreSQL Exporter
+      - job_name: 'postgres-exporter'
+        static_configs:
+        - targets: ['postgres-exporter:9187']
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+
+      # Redis Exporter
+      - job_name: 'redis-exporter'
+        static_configs:
+        - targets: ['redis-exporter:9121']
+        metrics_path: '/metrics'
+        scrape_interval: 30s

@@ -17,6 +17,8 @@ spec:
         app: prometheus
     spec:
       serviceAccountName: prometheus
+      dnsPolicy: ClusterFirst
+      # hostNetwork: true  # Ensure this is not set or commented out
       containers:
       - name: prometheus
         image: prom/prometheus:v2.45.0

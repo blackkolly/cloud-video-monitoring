@@ -18,6 +18,8 @@ import logging
 from datetime import datetime
 import uuid
 import time
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from starlette.responses import Response
 
 # Import our streaming service
 import sys
@@ -501,10 +503,10 @@ async def update_configuration(config: Dict):
 
 # Prometheus metrics endpoint
 @app.get("/metrics")
-async def prometheus_metrics():
+def metrics():
     """Prometheus metrics endpoint"""
     try:
-        return metrics_collector.get_metrics()
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
     except Exception as e:
         logger.error(f"Error getting Prometheus metrics: {e}")
         # Fallback basic metrics
